@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f2">
+  <meta name="description" content="在十九路棋盘自由落子，按当前棋形探索定式、变招和反击。">
+  <title>弈角 · 围棋定式探索</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="go.js" defer></script>
+  <script src="lessons.js" defer></script>
+  <script src="pachi-data.js" defer></script>
+  <script src="sgf-book.js" defer></script>
+  <script src="explorer.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button class="brand" id="home" type="button" aria-label="弈角首页">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+        <span>弈角</span>
+      </button>
+      <nav class="top-nav" aria-label="学习方式">
+        <button id="explore-nav" class="nav-button" type="button" aria-current="page"><span class="board-icon" aria-hidden="true"></span>自由探索</button>
+        <button id="study-nav" class="nav-button" type="button"><span class="book-icon" aria-hidden="true"></span>定式研习</button>
+        <button id="practice-nav" class="nav-button" type="button"><span class="target-icon" aria-hidden="true"></span>落子练习</button>
+      </nav>
+      <button id="progress-button" class="progress-button" type="button" aria-haspopup="dialog">
+        <span class="progress-ring" id="progress-ring" aria-hidden="true"></span>
+        <span class="progress-label">练习进度</span>
+        <span id="progress-count" class="progress-count">0 / 9</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="workspace explorer-workspace" id="workspace">
+    <aside class="sidebar" id="lesson-sidebar" aria-label="定式目录" hidden>
+      <div class="sidebar-heading">
+        <h2>定式目录</h2>
+        <span id="lesson-count"></span>
+      </div>
+      <nav class="lesson-list" id="lesson-list" aria-label="定式专题"></nav>
+      <details class="lesson-note" id="lesson-note">
+        <summary><span class="note-icon" aria-hidden="true">?</span><span id="context-title">全局怎么选</span></summary>
+        <p id="lesson-context"></p>
+      </details>
+    </aside>
+
+    <main class="main" id="main">
+      <header class="lesson-header">
+        <div>
+          <div class="lesson-category" id="lesson-category"></div>
+          <h1 id="lesson-title"></h1>
+          <p id="lesson-description"></p>
+        </div>
+        <div class="lesson-actions">
+          <button class="button" id="open-guide" type="button" aria-haspopup="dialog">新手指南</button>
+          <button class="button button-primary" id="main-action" type="button"></button>
+          <button class="button button-primary" id="ai-analyze" type="button" aria-controls="explanation">AI 分析</button>
+        </div>
+      </header>
+
+      <div class="workbench">
+        <section class="board-card" aria-labelledby="board-title">
+          <header class="card-header board-header">
+            <div class="board-heading">
+              <h2 id="board-title">局部棋盘</h2>
+              <span class="secondary board-subtitle" id="board-subtitle">十九路</span>
+            </div>
+            <div class="board-options">
+              <label class="switch-label" id="candidate-option"><input id="show-candidates" type="checkbox" checked><span class="switch-track" aria-hidden="true"></span>候选点</label>
+              <label class="switch-label"><input id="move-numbers" type="checkbox" checked><span class="switch-track" aria-hidden="true"></span>手数</label>
+            </div>
+          </header>
+          <div class="explore-controls" id="explore-controls">
+            <div class="player-controls" aria-label="自由落子控制">
+              <button id="clear-board" type="button" class="button control-button">清空</button>
+              <button id="undo-move" type="button" class="button control-button">悔棋</button>
+              <button id="redo-move" type="button" class="button control-button">重做</button>
+              <button id="pass-move" type="button" class="button control-button">虚手</button>
+            </div>
+          </div>
+          <div class="board-stage">
+            <div class="goban" id="goban" aria-label="完整的十九路围棋棋盘">
+              <div class="board-grid" id="board-grid" role="group" aria-label="棋盘交叉点"></div>
+            </div>
+          </div>
+          <div class="board-caption">
+            <span id="board-status"></span>
+            <span class="capture-count" id="capture-count"></span>
+          </div>
+          <div class="study-controls" id="study-controls" hidden>
+            <div class="player-controls" aria-label="棋谱播放控制">
+              <button id="reset" type="button" class="button control-button">起点</button>
+              <button id="previous" type="button" class="button control-button">上一手</button>
+              <button id="autoplay" type="button" class="button control-button play-button">播放</button>
+              <button id="next" type="button" class="button button-primary control-button">下一手</button>
+            </div>
+            <div class="timeline" id="timeline" role="group" aria-label="跳到指定手数"></div>
+          </div>
+          <div class="practice-controls" id="practice-controls" hidden>
+            <button id="retry" class="button control-button" type="button">重新练习</button>
+            <span class="secondary" id="practice-count"></span>
+          </div>
+        </section>
+
+        <div class="lesson-panels">
+          <section class="explanation-card" aria-labelledby="explanation-title">
+            <header class="card-header explanation-header">
+              <h2 id="explanation-title"></h2>
+              <select id="focus-corner" class="corner-select" aria-label="棋形识别范围">
+                <option value="auto">跟随落子</option>
+                <option value="board">全盘建议</option>
+              </select>
+              <button id="back-to-main" type="button" class="text-button" hidden>回到定式</button>
+            </header>
+            <div id="explanation" class="explanation" aria-live="polite"></div>
+          </section>
+          <section class="variation-card" aria-labelledby="variation-title">
+            <header class="card-header variation-header">
+              <h2 id="variation-title"></h2>
+              <span class="secondary" id="variation-count"></span>
+            </header>
+            <div id="variation-list" class="variation-list"></div>
+          </section>
+          <div class="source" id="source"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="guide-dialog" class="progress-dialog" aria-labelledby="guide-title">
+    <header class="dialog-header">
+      <h2 id="guide-title">新手指南</h2>
+      <form method="dialog"><button type="submit" class="button control-button" autofocus>关闭</button></form>
+    </header>
+    <div class="guide-content">
+      <section>
+        <h3>自己摆两手</h3>
+        <p>黑落右上角星位 Q16，白落 R17 点三三。试着点一个字母候选，看看黑从哪一边挡，之后双方怎么下。</p>
+        <button id="guide-explore" type="button" class="button button-primary">在棋盘试摆</button>
+      </section>
+      <section>
+        <h3>看懂每一手</h3>
+        <p>跟着「下一手」看黑棋怎么封外面、白棋怎么在角里安定。看完可以点「练习定式」，试着自己下。</p>
+        <button id="guide-study" type="button" class="button">从星位点三三学起</button>
+      </section>
+      <details>
+        <summary>落子前常看的几个词</summary>
+        <dl>
+          <dt>气</dt><dd>棋子或相连的一块棋，紧挨着的上下左右空点。没有气就会被提走。</dd>
+          <dt>打吃</dt><dd>让对手的棋只剩一口气，下一手有机会提掉。</dd>
+          <dt>扳</dt><dd>绕到对手棋头的一侧，压住它前进的方向。扳之前要看对方能否切断。</dd>
+          <dt>切断</dt><dd>占住对手两块棋之间的连接点，使它们分开。</dd>
+          <dt>外势</dt><dd>面向边上或中央的强棋，可以帮助扩张或攻击。</dd>
+        </dl>
+      </details>
+    </div>
+  </dialog>
+
+  <dialog id="progress-dialog" class="progress-dialog" aria-labelledby="progress-title">
+    <header class="dialog-header">
+      <div><h2 id="progress-title">练习进度</h2><p id="progress-summary" class="secondary"></p></div>
+      <form method="dialog"><button type="submit" class="button control-button">关闭</button></form>
+    </header>
+    <div id="progress-list" class="progress-list"></div>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "weiqi-variations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "弈角 · 在十九路棋盘学习定式和变招",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

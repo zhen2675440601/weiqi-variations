@@ -1,0 +1,8 @@
+/katago/
+/node_modules/
+/.katago-download/
+/.env
+/.env.*
+*.log
+Thumbs.db
+.DS_Store
