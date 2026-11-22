@@ -1,4 +1,4 @@
-// SGF data from Pachi (GPL-2.0, see COPYING.pachi).
+// SGF data from Pachi (GPL-2.0, see licenses/pachi.txt).
 // https://github.com/pasky/pachi/tree/master/joseki
 // The original SGF text is retained inside each JavaScript string.
 const pachiJoseki = [

@@ -14,7 +14,7 @@ const port = Number(process.env.YIJIAO_PORT ?? 8787);
 const columns = "ABCDEFGHJKLMNOPQRST";
 const pointPattern = /^[A-HJ-T](?:[1-9]|1[0-9])$/;
 const corners = new Set(["nw", "ne", "sw", "se"]);
-const assets = new Set(["index.html", "styles.css", "app.js", "go.js", "lessons.js", "explorer.js", "sgf-book.js", "pachi-data.js", "COPYING.pachi", "README.md"]);
+const assets = new Set(["index.html", "styles.css", "app.js", "go.js", "lessons.js", "explorer.js", "sgf-book.js", "pachi-data.js", "licenses/pachi.txt", "README.md"]);
 const mime = { html: "text/html", css: "text/css", js: "text/javascript" };
 let busy = false;
 

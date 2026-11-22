@@ -6,7 +6,9 @@ const GoExplorer = (() => {
   const axes = [[1, 0], [0, 1]];
   const directions = [...axes, [-1, 0], [0, -1]];
   const cornerSpan = 10;
+  const coreSpan = 7;
   const area = Array.from({ length: cornerSpan ** 2 }, (_, i) => Math.floor(i / cornerSpan) * Go.size + i % cornerSpan);
+  const coreIndices = [...area.keys()].filter((i) => i % cornerSpan < coreSpan && Math.floor(i / cornerSpan) < coreSpan);
   const corners = [
     { id: "nw", label: "左上角" }, { id: "ne", label: "右上角", right: true },
     { id: "sw", label: "左下角", bottom: true }, { id: "se", label: "右下角", right: true, bottom: true },
@@ -22,7 +24,7 @@ const GoExplorer = (() => {
       }
       return { indices: area.map(transform), point: (point) => Go.pointAt(transform(Go.index(point))) };
     });
-    const core = views[0].indices.filter((_, i) => i % cornerSpan < 7 && Math.floor(i / cornerSpan) < 7);
+    const core = coreIndices.map((i) => views[0].indices[i]);
     return { ...corner, views, core, scope: new Set(views[0].indices) };
   });
 
@@ -53,13 +55,42 @@ const GoExplorer = (() => {
     return indices.map((i) => !board[i] ? "." : board[i].color === owner ? "1" : "2").join("");
   }
 
+  function coreKey(key) {
+    return coreIndices.map((i) => key[i]).join("");
+  }
+
+  function prepareBook(index) {
+    const byCore = new Map();
+    for (const [key, entries] of index) {
+      let right = coreSpan - 1;
+      let bottom = coreSpan - 1;
+      let stones = 0;
+      for (let i = 0; i < key.length; i += 1) {
+        if (key[i] === ".") continue;
+        stones += 1;
+        // Keep two extra lines around the stones, including long extensions outside the core.
+        right = Math.max(right, i % cornerSpan + 2);
+        bottom = Math.max(bottom, Math.floor(i / cornerSpan) + 2);
+      }
+      const fringe = [...area.keys()].filter((i) => {
+        const x = i % cornerSpan;
+        const y = Math.floor(i / cornerSpan);
+        return (x >= coreSpan || y >= coreSpan) && x <= right && y <= bottom;
+      });
+      const core = coreKey(key);
+      if (!byCore.has(core)) byCore.set(core, []);
+      byCore.get(core).push({ key, entries, stones, fringe });
+    }
+    return { index, byCore };
+  }
+
   function explain(text, match) {
     const local = text.replace(/\b[A-HJ-T](?:1[0-9]|[1-9])\b/g, match.view.point);
     return match.owner === "black" ? local : local.replace(/[黑白]/g, (color) => color === "黑" ? "白" : "黑");
   }
 
   function nextKind(line, step) {
-    if (!line.deviation) return "joseki";
+    if (!line.deviation) return line.id && line.id !== "main" ? "branch" : "joseki";
     if (step + 1 === line.deviation) return "deviation";
     if (step < line.deviation) return "branch";
     return (step - line.deviation) % 2 === 0 ? "counter" : "reply";
@@ -413,7 +444,6 @@ const GoExplorer = (() => {
       ...path,
       family: course.title,
       source: course.source,
-      deviation: path.id === "main" ? null : path.drillAt,
     })));
     for (const line of extraLines) lines.push({ ...line, frames: Go.replay(line.moves) });
     const index = new Map();
@@ -425,22 +455,45 @@ const GoExplorer = (() => {
       }
     }
 
-    function findMatches(board, corner, from = index) {
+    const teachingBook = prepareBook(index);
+    const referenceBook = prepareBook(references.index);
+
+    function findMatches(board, corner, book = teachingBook) {
       const matches = [];
-      for (const view of corner.views) {
-        for (const owner of ["black", "white"]) {
-          const entries = from.get(signature(board, view.indices, owner));
-          for (const entry of entries?.values() ?? []) matches.push({ ...entry, view, owner });
+      const fallback = [];
+      function add(entries, key, view, owner) {
+        // Start with the earliest stone in the matched pattern, ignoring unrelated extra stones.
+        let first = null;
+        for (let i = 0; i < key.length; i += 1) {
+          const at = view.indices[i];
+          if (key[i] !== "." && (first === null || board[at].moveNumber < board[first].moveNumber)) first = at;
+        }
+        for (const entry of entries.values()) {
+          const anchored = first !== null && view.point(entry.first) === Go.pointAt(first);
+          matches.push({ ...entry, view, owner, anchored });
         }
       }
-      if (!matches.length) return matches;
-
-      // The same two stones can arise from a 3-3 invasion or a 3-3 opening.
-      let first = null;
-      for (const at of corner.scope) {
-        if (board[at] && (first === null || board[at].moveNumber < board[first].moveNumber)) first = at;
+      for (const view of corner.views) {
+        for (const owner of ["black", "white"]) {
+          const key = signature(board, view.indices, owner);
+          const entries = book.index.get(key);
+          if (entries) add(entries, key, view, owner);
+          else fallback.push({ key, view, owner });
+        }
       }
-      const anchored = matches.filter((match) => match.view.point(match.first) === Go.pointAt(first));
+      if (!matches.length) {
+        let mostStones = 0;
+        for (const { key, view, owner } of fallback) {
+          for (const pattern of book.byCore.get(coreKey(key)) ?? []) {
+            if (pattern.stones < mostStones || !pattern.fringe.every((i) => pattern.key[i] === key[i])) continue;
+            if (pattern.stones > mostStones) matches.length = 0;
+            mostStones = pattern.stones;
+            add(pattern.entries, pattern.key, view, owner);
+          }
+        }
+      }
+      // The same two stones can arise from a 3-3 invasion or a 3-3 opening.
+      const anchored = matches.filter((match) => match.anchored);
       return anchored.length ? anchored : matches;
     }
 
@@ -510,7 +563,7 @@ const GoExplorer = (() => {
       }
       const tryReply = (position, point) => legalPlay(position, point, step + 2, board);
 
-      if (corner && corner.views[0].indices.every((at) => !board[at])) {
+      if (corner && corner.core.every((at) => !board[at])) {
         result.title = step === 0 ? "从一颗棋子开始" : "这里还是空角";
         result.detail = "可以直接在棋盘任意合法点落子。想试常见角部开局，可从标出的点开始。";
         result.candidates = openings.map((opening) => ({ ...opening, point: corner.views[0].point(opening.point), kind: "opening" }));
@@ -518,7 +571,7 @@ const GoExplorer = (() => {
       }
 
       const matches = corner ? findMatches(board, corner) : [];
-      const library = corner ? findMatches(board, corner, references.index) : [];
+      const library = corner ? findMatches(board, corner, referenceBook) : [];
       const latest = corner && moves.slice(0, step).findLast((move) => move.point && corner.scope.has(Go.index(move.point)));
       if (matches.length) {
         const exact = matches.find((match) => match.view.point(match.line.moves[match.step - 1].point) === latest?.point);
@@ -557,7 +610,7 @@ const GoExplorer = (() => {
       if (corner) {
         for (let i = step - 1; i > 0; i -= 1) {
           const [earlier] = findMatches(frames[i].board, corner);
-          const [reference] = earlier ? [] : findMatches(frames[i].board, corner, references.index);
+          const [reference] = earlier ? [] : findMatches(frames[i].board, corner, referenceBook);
           if (!earlier && !reference) continue;
           const name = earlier
             ? earlier.step === 1 ? explain(earlier.line.moves[0].title, earlier) : earlier.line.family

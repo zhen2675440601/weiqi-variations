@@ -32,7 +32,7 @@
     step: courses[0].main.preview,
     numbers: byId("move-numbers").checked,
     boardFocus: "F15",
-    hint: false,
+    hint: null,
     mistake: null,
     feedback: null,
   };
@@ -303,7 +303,9 @@
       const status = note("KataGo 分析", aiAnalysis.message);
       if (aiAnalysis.help) {
         const link = element("a", "secondary", "本地 AI 使用说明");
-        link.href = "README.md";
+        link.href = window.location.protocol === "https:"
+          ? "https://github.com/zhen2675440601/weiqi-variations#可选的本地-ai-分析"
+          : "README.md";
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         status.append(link);
@@ -445,15 +447,20 @@
       const { title, text, error } = state.feedback;
       explanation.append(note(title, text, error ? "feedback error" : "feedback"));
     }
-    if (next && state.hint) explanation.append(element("p", "hint-text", `棋盘上已标出本谱的应手 ${next.point}。`));
+    if (next && state.hint === "answer") {
+      explanation.append(note(`本谱应手 ${next.point} · ${next.title}`, next.why));
+    } else if (next && state.hint === "hint") {
+      explanation.append(element("p", "hint-text", `棋盘上已标出本谱的应手 ${next.point}。`));
+    }
 
     if (next) {
       const actions = element("div", "exercise-actions");
-      const hint = button("button", state.hint ? "收起提示" : "显示提示");
-      const answer = button("button", "查看这一手");
+      const hint = button("button", state.hint === "hint" ? "收起提示" : "显示提示");
+      const answer = button("button", state.hint === "answer" ? "收起应手" : "查看这一手");
       hint.dataset.exerciseAction = "hint";
-      hint.setAttribute("aria-pressed", String(state.hint));
+      hint.setAttribute("aria-pressed", String(state.hint === "hint"));
       answer.dataset.exerciseAction = "answer";
+      answer.setAttribute("aria-pressed", String(state.hint === "answer"));
       actions.append(hint, answer);
       explanation.append(actions);
       if (activeAction) actions.querySelector(`[data-exercise-action="${activeAction}"]`)?.focus({ preventScroll: true });
@@ -462,7 +469,7 @@
 
   function renderVariations(course, path, studying) {
     const choices = studying ? course.paths.slice(1) : course.paths;
-    byId("variation-title").textContent = studying ? "对手变招" : "同局练习";
+    byId("variation-title").textContent = studying ? "分支与变招" : "同局练习";
     byId("variation-count").textContent = studying ? `${choices.length} 种` : `${choices.length} 题`;
     variationList.replaceChildren(...choices.map((choice) => {
       const control = button("variation-button");
@@ -560,7 +567,9 @@
     byId("context-title").textContent = studying ? "全局怎么选" : "练习方式";
     byId("lesson-context").textContent = studying ? course.context : "轮到你时在棋盘上落子，对手会按题谱应对。卡住时可以查看提示。";
     byId("main-action").textContent = studying ? (main ? "练习定式" : "练习应对") : "查看棋谱";
-    byId("explanation-title").textContent = studying ? (main ? "定式讲解" : "变招讲解") : "落子任务";
+    byId("explanation-title").textContent = studying
+      ? (main ? "定式讲解" : path.deviation ? "变招讲解" : "分支讲解")
+      : "落子任务";
     byId("back-to-main").hidden = !studying || main;
     if (studying) buildTimeline(path);
     renderVariations(course, path, studying);
@@ -583,7 +592,7 @@
     state.step = step ?? (mode === "study" ? path.preview ?? path.drillAt : path.drillAt);
     state.boardFocus = "F15";
     state.feedback = null;
-    state.hint = false;
+    state.hint = null;
     state.mistake = null;
     renderView();
   }
@@ -624,7 +633,7 @@
       state.step += reply ? 2 : 1;
       state.feedback = { title: `走对了 · ${nextMove.title}`, text: nextMove.why };
       state.mistake = null;
-      state.hint = false;
+      state.hint = null;
       if (state.step === path.moves.length) {
         recordProgress(path);
         renderVariations(currentCourse(), path, false);
@@ -732,13 +741,9 @@
 
   explanation.addEventListener("click", (event) => {
     const action = event.target.closest("[data-exercise-action]")?.dataset.exerciseAction;
-    if (action === "hint") {
-      state.hint = !state.hint;
-      renderStep();
-    } else if (action === "answer") {
-      setView(state.courseIndex, state.pathId, "study", state.step + 1);
-      byId("main-action").focus({ preventScroll: true });
-    }
+    if (action !== "hint" && action !== "answer") return;
+    state.hint = state.hint === action ? null : action;
+    renderStep();
   });
 
   boardGrid.addEventListener("click", (event) => {

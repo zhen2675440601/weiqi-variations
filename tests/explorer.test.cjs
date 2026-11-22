@@ -35,6 +35,40 @@ test("新手试摆能识别右上角星位点三三并给出挡法", () => {
   assert.ok(result.candidates.some(({ point, why }) => point === "R16" && why));
 });
 
+test("角部定式识别忽略远处落子，保留角内棋子的影响", () => {
+  for (const points of [["K10", "D4", "Q16", "R17"], ["K19", "D4", "Q16", "R17"], ["K10", "Q16", "R17"]]) {
+    const result = analyze(points);
+    assert.equal(result.title, "星位点三三");
+    assert.ok(result.candidates.some(({ point, kind }) => point === "R16" && kind === "joseki"));
+    assert.ok(result.candidates.some(({ point, kind }) => point === "Q17" && kind === "joseki"));
+  }
+  const nearby = analyze(["K10", "Q15", "Q16", "R17"]);
+  assert.notEqual(nearby.title, "星位点三三");
+});
+
+test("远处有棋时仍识别延伸到中线的定式阶段", () => {
+  const result = analyze(["K10", "D4", "D16", "F17", "E17", "F16", "D14", "K16"], "nw");
+  assert.equal(result.title, "星位小飞挂");
+  assert.match(result.detail, /K16 是图中的拆边选择/);
+});
+
+test("二段扳示范保留普通提子和白反提角尖的分支", () => {
+  const path = courses[0].paths.find(({ id }) => id === "corner-counter-capture");
+  const points = path.moves.map(({ point }) => point);
+  const beforeFirstCapture = analyze(points.slice(0, 11));
+  assert.equal(beforeFirstCapture.candidates.find(({ point }) => point === "F19")?.kind, "branch");
+  assert.equal(analyze(points.slice(0, 12)).candidates.find(({ point }) => point === "C18")?.kind, "branch");
+
+  const afterBlackA19 = analyze(points.slice(0, 19));
+  assert.ok(afterBlackA19.candidates.some(({ point }) => point === "A16"));
+  assert.ok(afterBlackA19.candidates.some(({ point }) => point === "B19"));
+  assert.equal(path.frames.at(-1).board[Go.index("A19")], null);
+  assert.equal(path.frames.at(-1).white - path.frames.at(-2).white, 1);
+
+  const followup = Go.replay([...path.moves, ...["A16", "A19", "C19"].map((point) => ({ point }))]);
+  assert.equal(followup.at(-1).black, 7);
+});
+
 test("扩展棋谱能显示夹攻并在偏离后给出反击", () => {
   const result = analyze(["Q16", "O17"]);
   assert.ok(explorer.referencePositions >= 1948);
