@@ -30,6 +30,7 @@ const GoExplorer = (() => {
 
   const labels = { opening: "占角", joseki: "定式", branch: "分支", deviation: "变招示例", counter: "反击", reply: "续着", book: "谱库续着", tactic: "战术", shape: "棋形建议", territory: "围地参考", ai: "KataGo" };
   const rank = { joseki: 1, counter: 2, branch: 3, reply: 4, book: 4, deviation: 5 };
+  const bookScores = { opening: 58, joseki: 60, counter: 68, branch: 55, reply: 51, book: 54 };
   const openings = [
     { point: "D16", title: "星位", why: "四线占角，两边都有发展空间。对手可以点三三，也可以小飞挂角。" },
     { point: "C16", title: "小目", why: "偏向经营一侧的角地，可以接着看小飞挂或一间高挂。" },
@@ -411,29 +412,113 @@ const GoExplorer = (() => {
     return [...suggestions.values()].slice(0, 4);
   }
 
-  function positionMoves(board, player, tryAt, tryReply, corner) {
+  function surroundingStones(board, corner) {
+    if (!corner) return [];
+    return board.flatMap((stone, at) => stone && !corner.core.includes(at) ? [{ at, color: stone.color }] : []);
+  }
+
+  function sideSupport(at, player, outside) {
+    const x = at % Go.size;
+    const y = Math.floor(at / Go.size);
+    let friend = null;
+    let opponent = null;
+    for (const stone of outside) {
+      const distance = Math.abs(x - stone.at % Go.size) + Math.abs(y - Math.floor(stone.at / Go.size));
+      if (distance < 2 || distance > 6) continue;
+      if (stone.color === player) {
+        if (!friend || distance < friend.distance) friend = { at: stone.at, distance };
+      } else if (!opponent || distance < opponent.distance) {
+        opponent = { at: stone.at, distance };
+      }
+    }
+
+    const support = friend ? `这侧有 ${Go.pointAt(friend.at)} 一带的己方棋可以呼应。` : "";
+    const pressure = opponent ? `向这侧展开要留意 ${Go.pointAt(opponent.at)} 一带的对手棋。` : "";
+    return { score: 2 * ((opponent?.distance ?? 7) - (friend?.distance ?? 7)), why: support + pressure };
+  }
+
+  function readReply(board, played, at, player, endangered, tryReply) {
+    const own = Go.group(played.board, at);
+    const replyPoints = new Set(own.liberties.size <= 2 ? own.liberties : []);
+    for (const group of endangered) {
+      if (own.stones.has(group.at)) continue;
+      const { liberties } = Go.group(played.board, group.at);
+      if (liberties.size === 1) replyPoints.add(liberties.values().next().value);
+    }
+
+    const opponent = colorName(player === "black" ? "white" : "black");
+    let capture = null;
+    let atari = null;
+    for (const target of replyPoints) {
+      const point = Go.pointAt(target);
+      const reply = tryReply(played.board, point);
+      if (!reply) continue;
+      if (reply.captured > (capture?.stones ?? 0)) capture = { point, stones: reply.captured };
+      if (!reply.captured && own.liberties.size === 2 && Go.group(reply.board, at).liberties.size === 1) atari ??= point;
+    }
+    if (capture) {
+      return { penalty: 22 + Math.min(capture.stones, 8) * 6, why: `若${opponent}在 ${capture.point} 应手，可以立即提走己方 ${capture.stones} 子。` };
+    }
+    if (atari) return { penalty: 8, why: `${opponent}可在 ${atari} 打吃刚落下的这块棋。` };
+
+    // When the candidate puts a group in atari, check its legal extension.
+    for (const [dx, dy] of directions) {
+      const target = offset(at, dx, dy);
+      if (!played.board[target] || played.board[target].color === player) continue;
+      const { liberties } = Go.group(played.board, target);
+      if (liberties.size !== 1 || Go.group(board, target).liberties.size < 2) continue;
+      const point = Go.pointAt(liberties.values().next().value);
+      const reply = tryReply(played.board, point);
+      if (!reply) continue;
+      const remaining = Go.group(reply.board, target).liberties.size;
+      if (remaining > 1) return { penalty: 4, why: `${opponent}可在 ${point} 长出，这块棋会增到 ${remaining} 口气。` };
+    }
+    return { penalty: 0, why: "" };
+  }
+
+  function positionMoves(board, player, tryAt, tryReply, corner, { moves: book, excluded = new Set() }) {
     const scope = corner?.scope;
     const groups = groupsInScope(board, scope);
-    const moves = [
+    const generated = new Map();
+    for (const move of [
       ...tacticalMoves(groups, player, tryAt),
       ...haneMoves(board, player, tryAt, tryReply, scope),
       ...wallMoves(board, player, tryAt, scope),
       ...enclosureMoves(board, player, tryAt, scope),
       ...shapeMoves(groups, player, tryAt, scope),
-    ].sort((a, b) => b.score - a.score);
-    const used = new Set();
-    const candidates = [];
-    for (const move of moves) {
-      if (used.has(move.point)) continue;
-      candidates.push(move);
-      used.add(move.point);
-      if (candidates.length === 4) break;
+    ]) {
+      if (scope && !scope.has(Go.index(move.point))) continue;
+      if (move.score > (generated.get(move.point)?.score ?? -1)) generated.set(move.point, move);
     }
+
+    const outside = surroundingStones(board, corner);
+    const endangered = groups.filter((group) => group.player === player && group.liberties.size === 1);
+    const bookPoints = new Set(book.map(({ point }) => point));
+    function evaluate(move, base) {
+      const at = Go.index(move.point);
+      const support = sideSupport(at, player, outside);
+      const reply = readReply(board, tryAt(move.point), at, player, endangered, tryReply);
+      return { ...move, score: base + support.score - reply.penalty, why: move.why + support.why + reply.why };
+    }
+
+    // Preserve the book branches and add distinct tactical or strategic ideas from the live board.
+    const alternatives = [...generated.values()]
+      .filter(({ point, score }) => !bookPoints.has(point) && !excluded.has(point) && (!book.length || score >= 40))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((move) => evaluate(move, move.score))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, book.length ? 3 : 4);
+    const references = book.map((move) => move.kind === "deviation"
+      ? { ...move, score: -100 }
+      : evaluate(move, Math.max(bookScores[move.kind], generated.get(move.point)?.score ?? 0)));
+    const candidates = [...references, ...alternatives].sort((a, b) => b.score - a.score);
     if (candidates.length) return candidates;
 
-    const openCorners = corner ? [] : openCornerMoves(board, tryAt);
+    const tryUnlisted = (point) => excluded.has(point) ? null : tryAt(point);
+    const openCorners = corner ? [] : openCornerMoves(board, tryUnlisted);
     if (openCorners.length) return openCorners;
-    return approachMoves(groups.filter((group) => group.player !== player && group.size <= 3), tryAt, scope);
+    return approachMoves(groups.filter((group) => group.player !== player && group.size <= 3), tryUnlisted, scope);
   }
 
   function create(courses, extraLines, records = []) {
@@ -514,9 +599,14 @@ const GoExplorer = (() => {
     function referenceMoves(matches, choices, player, tryAt) {
       const moves = new Map();
       const used = new Set(choices.map((choice) => choice.point));
+      const excluded = new Set();
       for (const { view, next, owner } of matches) {
-        if (!next || next.kind === "deviation" || actualColor(next.color, owner) !== player) continue;
+        if (!next || actualColor(next.color, owner) !== player) continue;
         const point = view.point(next.point);
+        if (next.kind === "deviation") {
+          excluded.add(point);
+          continue;
+        }
         if (used.has(point) || (moves.has(point) && rank[moves.get(point).kind] <= rank[next.kind])) continue;
         const played = tryAt(point);
         if (!played) continue;
@@ -542,7 +632,7 @@ const GoExplorer = (() => {
         }
         moves.set(point, { point, kind: next.kind, title, why });
       }
-      return [...choices, ...[...moves.values()].sort((a, b) => rank[a.kind] - rank[b.kind])];
+      return { moves: [...choices, ...[...moves.values()].sort((a, b) => rank[a.kind] - rank[b.kind])], excluded };
     }
 
     function analyze({ moves, frames, step, focus }) {
@@ -566,12 +656,17 @@ const GoExplorer = (() => {
       if (corner && corner.core.every((at) => !board[at])) {
         result.title = step === 0 ? "从一颗棋子开始" : "这里还是空角";
         result.detail = "可以直接在棋盘任意合法点落子。想试常见角部开局，可从标出的点开始。";
-        result.candidates = openings.map((opening) => ({ ...opening, point: corner.views[0].point(opening.point), kind: "opening" }));
+        const choices = openings.map((opening) => ({ ...opening, point: corner.views[0].point(opening.point), kind: "opening" }));
+        result.candidates = corner.views[0].indices.some((at) => board[at])
+          ? positionMoves(board, player, tryAt, tryReply, corner, { moves: choices })
+          : choices;
         return result;
       }
 
       const matches = corner ? findMatches(board, corner) : [];
       const library = corner ? findMatches(board, corner, referenceBook) : [];
+      const book = referenceMoves(library, bookMoves(matches, player, tryAt), player, tryAt);
+      result.candidates = positionMoves(board, player, tryAt, tryReply, corner, book);
       const latest = corner && moves.slice(0, step).findLast((move) => move.point && corner.scope.has(Go.index(move.point)));
       if (matches.length) {
         const exact = matches.find((match) => match.view.point(match.line.moves[match.step - 1].point) === latest?.point);
@@ -580,15 +675,13 @@ const GoExplorer = (() => {
         const applied = line.moves[localStep - 1];
         const inVariation = line.deviation && localStep >= line.deviation;
         const finished = localStep === line.moves.length;
-        const candidates = referenceMoves(library, bookMoves(matches, player, tryAt), player, tryAt);
         result.title = localStep === 1 ? explain(applied.title, match) : line.family;
         result.phase = inVariation ? `变招 · ${explain(line.title, match)}` :
-          localStep === 1 ? "开局识别" : candidates.filter((candidate) => candidate.kind === "joseki").length > 1 ? "可比较多个定式方向" : line.title;
+          localStep === 1 ? "开局识别" : book.moves.filter((candidate) => candidate.kind === "joseki").length > 1 ? "可比较多个定式方向" : line.title;
         if (exact && localStep > 1) result.action = explain(applied.title, match);
         result.detail = finished ? explain(line.result, match) : exact ? explain(applied.why, match) : "已识别当前局部棋形。可以从候选落子比较不同的走势。";
-        result.candidates = candidates.length ? candidates : positionMoves(board, player, tryAt, tryReply, corner);
         result.source = line.source;
-        if (!finished && !candidates.length && nextPlayer(match) !== player) {
+        if (!finished && !book.moves.length && nextPlayer(match) !== player) {
           result.tip = `这条棋谱下一手由${colorName(nextPlayer(match))}棋应。候选落点按当前行棋方计算。`;
         }
         return result;
@@ -596,14 +689,12 @@ const GoExplorer = (() => {
 
       if (library.length) {
         const match = library.find(({ view, last }) => view.point(last.point) === latest?.point) ?? library[0];
-        const candidates = referenceMoves(library, [], player, tryAt);
         result.title = match.family;
         result.phase = match.last.kind === "deviation" ? "谱库变招" : "Pachi 定式谱";
         result.source = match.source;
         result.detail = match.last.kind === "deviation"
-          ? "最后一手是谱库记录的偏离。可以落出一手反击，再继续比较双方续着。"
-          : "这个局部已匹配到谱库棋形。可以比较候选落点与后续交换。";
-        result.candidates = candidates.length ? candidates : positionMoves(board, player, tryAt, tryReply, corner);
+          ? "最后一手是谱库记录的偏离。可以比较棋谱里的反击和眼下的提子、接棋机会。"
+          : "这个局部已匹配到谱库棋形。可以结合周边的接应和对手的应手比较候选。";
         return result;
       }
 
@@ -619,7 +710,6 @@ const GoExplorer = (() => {
           break;
         }
       }
-      result.candidates = positionMoves(board, player, tryAt, tryReply, corner);
       result.detail = "当前是自由变化。候选会结合棋块强弱、断点和周围的空间，提示扳头、补棋或围地的方向。";
       return result;
     }

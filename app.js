@@ -285,7 +285,7 @@
     byId("undo-move").disabled = step === 0;
     byId("redo-move").disabled = step === exploration.moves.length;
     byId("clear-board").disabled = exploration.moves.length === 0;
-    byId("ai-analyze").textContent = aiAnalysis?.pending ? "取消分析" : aiAnalysis?.candidates ? "回到棋谱" : "AI 分析";
+    byId("ai-analyze").textContent = aiAnalysis?.pending ? "取消分析" : aiAnalysis?.candidates ? "回到候选" : "AI 分析";
     byId("variation-title").textContent = aiAnalysis?.candidates ? "KataGo 候选落点" : "候选落点";
 
     const meta = element("div", "move-meta");
