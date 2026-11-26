@@ -29,6 +29,35 @@ test("所有精选定式线路和变招都能完整重放", () => {
   }
 });
 
+test("四个空角都标出三线和四线的两个朝向", () => {
+  const counts = { 星位: 1, 小目: 2, 三三: 1, 目外: 2, 高目: 2, 大目外: 2, 大高目: 2, 五五: 1 };
+  for (const { id } of GoExplorer.corners) {
+    const { candidates } = analyze([], id);
+    assert.equal(candidates.length, 13);
+    assert.equal(new Set(candidates.map(({ point }) => point)).size, 13);
+    for (const [title, count] of Object.entries(counts)) {
+      assert.equal(candidates.filter((move) => move.title === title).length, count, `${id} ${title}`);
+    }
+  }
+});
+
+test("右上角三五、三六和四六的落点能识别并继续摆", () => {
+  const starts = [
+    ["R15", /目外/, "Q17", "P16"],
+    ["P17", /目外/, "R16", "Q15"],
+    ["O17", /大目外/, "Q17", "R15"],
+    ["O16", /大高目/, "Q17", "Q16"],
+  ];
+  for (const [first, name, second, third] of starts) {
+    const start = analyze([first]);
+    assert.match(start.title, name);
+    assert.ok(start.candidates.some(({ point }) => point === second), `${first} → ${second}`);
+    const followup = analyze([first, second]);
+    assert.match(followup.title, name);
+    assert.ok(followup.candidates.some(({ point, why }) => point === third && why), `${first} → ${second} → ${third}`);
+  }
+});
+
 test("新手试摆能识别右上角星位点三三并给出挡法", () => {
   const result = analyze(["Q16", "R17"]);
   assert.equal(result.title, "星位点三三");

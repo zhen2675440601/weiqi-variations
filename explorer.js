@@ -33,11 +33,25 @@ const GoExplorer = (() => {
   const bookScores = { opening: 58, joseki: 60, counter: 68, branch: 55, reply: 51, book: 54 };
   const openings = [
     { point: "D16", title: "星位", why: "四线占角，两边都有发展空间。对手可以点三三，也可以小飞挂角。" },
-    { point: "C16", title: "小目", why: "偏向经营一侧的角地，可以接着看小飞挂或一间高挂。" },
-    { point: "D17", title: "小目 · 另一方向", why: "同样是小目，着重经营的方向转向另一条边。" },
+    { point: "C16", title: "小目", why: "三四线交点，偏向经营一侧角地。" },
     { point: "C17", title: "三三", why: "直接占据角内，接下来可以看对手从星位斜挂时的应法。" },
-    { point: "E16", title: "高目", why: "在五四路占角，着重向外发展。可以从棋谱比较对方挂角后的应对。" },
+    { point: "E17", title: "目外", why: "三五线交点，可以比较小目挂后取角和取外势的走法。" },
+    { point: "E16", title: "高目", why: "四五线交点，着重向外发展。可以查看挂角后的棋谱。" },
+    { point: "F17", title: "大目外", why: "三六线交点，靠边展开，角内留有挂角空间。" },
+    { point: "F16", title: "大高目", why: "四六线交点，也称超高目。外侧较高，角内还很宽。" },
+    { point: "E15", title: "五五", why: "五线交点，向两边发展。对手仍有空间从角内靠近。" },
   ];
+
+  function cornerOpenings(corner) {
+    const choices = new Map();
+    for (const opening of openings) {
+      for (const view of corner.views) {
+        const point = view.point(opening.point);
+        choices.set(point, { ...opening, point, kind: "opening" });
+      }
+    }
+    return [...choices.values()];
+  }
 
   function colorName(color) {
     return color === "black" ? "黑" : "白";
@@ -656,7 +670,7 @@ const GoExplorer = (() => {
       if (corner && corner.core.every((at) => !board[at])) {
         result.title = step === 0 ? "从一颗棋子开始" : "这里还是空角";
         result.detail = "可以直接在棋盘任意合法点落子。想试常见角部开局，可从标出的点开始。";
-        const choices = openings.map((opening) => ({ ...opening, point: corner.views[0].point(opening.point), kind: "opening" }));
+        const choices = cornerOpenings(corner);
         result.candidates = corner.views[0].indices.some((at) => board[at])
           ? positionMoves(board, player, tryAt, tryReply, corner, { moves: choices })
           : choices;

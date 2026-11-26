@@ -58,6 +58,17 @@ const { lessons, explorationLines } = (() => {
     move("K16", "沿边展开", "白棋从已有的三子棋形拆开。黑棋的角部与白棋的边上发展形成局部交换。"),
   ];
 
+  const outsidePoint = move("C15", "目外占角", "三、五线交点，白可以占小目挂角，也可以从四线靠近。先想清楚是要角地还是边上的外势。");
+  const outsideLowApproach = [
+    outsidePoint,
+    move("D17", "落小目挂角", "白靠近空着的角。下一步可以沿三线伸展，给这块棋找根据。"),
+    move("E16", "从外侧斜罩", "黑从四线压住白棋往外发展的方向，准备把外势连成一排。"),
+    move("E17", "白沿三线长", "白把挂角子接实，同时压缩黑 E16 的气。"),
+    move("F16", "黑棋跟长", "黑连住 E16，把可以向外发展的棋接成一块。"),
+    move("G17", "白继续在三线长", "白棋在边上连成三子。贴边容易获得根据，同时让黑棋形成外壁。"),
+    move("C10", "借目外沿另一边拆开", "黑在 C15 所在的三线展开。周围有白棋时，要重新考虑拆的距离。"),
+  ];
+
   const lessons = [
     {
       id: "star-invasion",
@@ -204,6 +215,39 @@ const { lessons, explorationLines } = (() => {
         },
       ],
     },
+    {
+      id: "mokuhazushi",
+      title: "目外",
+      category: "目外定式",
+      subtitle: "三线挂角与四线外势",
+      description: "白挂目外后，比较取角和取外势两个方向。",
+      context: "白走三线挂角，可以沿边安定。黑也可以根据附近棋子的配置，选择把外势用在哪一边。",
+      source: { title: "PandaNet 围棋教程 · 图 16、19", url: "https://www.pandanet.co.jp/igonyumon/11-11.htm" },
+      main: {
+        id: "main", title: "小目挂 · 外侧斜罩", moves: outsideLowApproach, preview: 3, drillAt: 2,
+        goal: "从靠外的一侧罩住挂角的白棋，准备向边上发展。",
+        result: "白在三线形成一排连着的棋，黑在外面连长，再从原来的目外沿另一侧拆边。",
+      },
+      variations: [
+        {
+          id: "outside-high-approach", title: "四线挂 · 黑先取角", motif: "高挂",
+          summary: "白从四线靠近，黑可以先斜靠取角，白在上边展开。",
+          drillAt: 2,
+          goal: "白在四线挂角。黑先从靠近角内的一侧贴住挂角子。",
+          result: "黑顺势连回角内，并在 D14 保持和目外的联系。白在上边拆开，双方还可以根据全盘选择后续方向。",
+          moves: [
+            outsidePoint,
+            move("E16", "白从四线挂角", "白靠在目外外侧，保留往中央走的空间，也给黑从角内贴住的机会。"),
+            move("D17", "从角内斜靠", "黑先占小目，照顾角部，准备把左边的空点连起来。"),
+            move("E17", "白贴着长", "白连回四线的挂角子，仍有往上边走的空间。"),
+            move("D16", "黑连回星位", "黑接住 D17，沿着白棋形成对峙。"),
+            move("E15", "白继续往外长", "白把三颗棋连起来，伸到中央一带。"),
+            move("D14", "黑尖住目外", "D14 与 C15 成斜形，照顾目外一侧。"),
+            move("J17", "白从三线拆开", "白沿空着的边展开。拆得多远要看边上已有的黑棋。"),
+          ],
+        },
+      ],
+    },
   ];
 
   const smallKnightDefense = [
@@ -213,6 +257,10 @@ const { lessons, explorationLines } = (() => {
   const sideExtension = move("J16", "沿边拆开", "白棋从挂角子沿边展开，给这块棋留下根据地。周围有黑棋时，要重新考虑拆边的距离。");
   const threeThree = move("C17", "三三占角", "借两条棋盘边线取角，角部扎实，向中央发展的速度较慢。");
   const sanSanApproach = move("D16", "星位斜挂", "白棋从外侧压住三三，争取向中央发展。黑棋可以选一边长出，把角内的棋连起来。");
+  const localAnalysis = { title: "KataGo 局部试走", url: "https://github.com/lightvector/KataGo/blob/v1.18.1/docs/Analysis_Engine.md" };
+  const largeOutside = move("F17", "大目外占角", "三六线位置离角尖较远。看白是下小目、先取得角内空间，还是从另一侧靠近。");
+  const largeHigh = move("F16", "大高目占角", "四六线离边和角都有距离，可以先看对手从三线和四线靠近时的区别。");
+  const fiveFive = move("E15", "五五占角", "五五靠外，先考虑外势。白可以从星位或小目靠近角部。");
   const explorationLines = [
     {
       family: "星位小飞挂", title: "小飞守角 · 直接拆边", source: lessons[1].source,
@@ -245,6 +293,48 @@ const { lessons, explorationLines } = (() => {
       family: "三三斜挂", title: "三三占角 · 外侧斜挂", source: { title: "英国围棋协会 · 三三参考图", url: "https://www.britgo.org/bgj/00221.html" },
       result: "角内一方连住三三，斜挂的一方可以在外侧展开。",
       moves: [threeThree, sanSanApproach, move("C16", "贴着三三长出", "黑棋连住三三，护住角部，并留下沿边发展的方向。也可以对称地从另一边长出。")],
+    },
+    {
+      id: "large-outside-low", family: "大目外", title: "三线小目 · 局部试走", source: localAnalysis,
+      result: "白在角内先占小目，黑沿另一侧展开。全盘棋子不同，两边还可以重新选择方向。",
+      moves: [largeOutside, move("D17", "三线小目挂", "白占住靠角的一侧，利用角边争取根据。"),
+        move("C15", "黑占另一侧目外", "黑把两颗棋分布在角的两侧，保留左右发展的机会。"),
+        move("E16", "白向外尖", "白从小目向外斜出，同时靠近外侧的黑棋。")],
+    },
+    {
+      id: "large-outside-high", family: "大目外", title: "四线小目 · 局部试走", source: localAnalysis,
+      result: "黑从高一侧的挂角子旁转到三线。接下来的应对要看两边的接应。",
+      moves: [largeOutside, move("C16", "四线小目挂", "白从另一侧的小目进入角部，角内还有三三。"),
+        move("D17", "黑占三线小目", "黑落到白小目斜旁，和原来的大目外沿三线呼应。")],
+    },
+    {
+      id: "large-high-low", family: "大高目", title: "三线挂 · 局部试走", source: localAnalysis,
+      result: "黑从四线靠住白棋后也可以取三三，白在外面另找发展方向。",
+      moves: [largeHigh, move("D17", "三线靠近角", "白在小目落子，争取先在角边立足。"),
+        move("D16", "黑在星位贴住", "黑接触白棋，并与自己四线的大高目同向。"),
+        move("C16", "白从另一侧扳", "白从外面贴住黑星位，有 C17 可以连接两颗白棋。"),
+        move("C17", "黑占三三切开", "黑占住连接点，白的两子现在分开。继续时要算双方的气。")],
+    },
+    {
+      id: "large-high-star", family: "大高目", title: "四线挂 · 局部试走", source: localAnalysis,
+      result: "白先占靠角的星位，黑从三线贴住。这里可以继续从角内外两侧试走。",
+      moves: [largeHigh, move("D16", "白占四线星位", "白从星位争夺角部，同时给自己留出两边的发展余地。"),
+        move("D17", "黑从三线贴", "黑在白星位靠边的一侧接触，直接争夺角内空间。"),
+        move("C17", "白扳到三三", "白在角内扳住黑棋，同时保留 C16 的连接点。")],
+    },
+    {
+      id: "five-five-star", family: "五五", title: "星位挂 · 局部试走", source: localAnalysis,
+      result: "黑围绕五五向边上伸展，白沿星位向外发展。",
+      moves: [fiveFive, move("D16", "白从星位靠近", "白靠到外侧黑棋和角尖之间，争取占住角边。"),
+        move("E16", "黑贴住白棋", "黑接到原来的五五，贴住白星位，开始局部接触战。"),
+        move("D17", "白向三线长", "白连接星位并落到三线，保留往角里安定的空间。")],
+    },
+    {
+      id: "five-five-small", family: "五五", title: "小目挂 · 局部试走", source: localAnalysis,
+      result: "白争取在小目和三三立足，黑在外面限制白棋的出路。",
+      moves: [fiveFive, move("C16", "白占小目", "白先靠向角内，打算用角边取得根据。"),
+        move("D17", "黑从另一侧靠", "黑占住另一个小目，白仍可占三三连接。"),
+        move("C17", "白连向三三", "白接住小目，角内两子连成一块。")],
     },
   ];
 
